@@ -36,6 +36,7 @@ void printUsage(const char* programName) {
               << "  --impedance        Enable impedance testing mode (default: disabled)\n"
               << "  --native-format    Transmit raw int32 ADC counts instead of float microvolts\n"
               << "  --shutdown         Shutdown the Amp Server (terminates all connections)\n"
+              << "  --yes              Skip interactive confirmation prompts\n"
               << "  --help             Show this help message\n";
 }
 
@@ -43,6 +44,15 @@ int main(int argc, char* argv[]) {
     egiamp::AmpServerConfig config;
     std::string configFile;
     bool shutdownMode = false;
+    bool assumeYes = false;
+
+    if (const char* envConfig = std::getenv("EGIAMP_CONFIG_FILE")) {
+        configFile = envConfig;
+    }
+    if (const char* envYes = std::getenv("EGIAMP_ASSUME_YES")) {
+        std::string value(envYes);
+        assumeYes = (value == "1" || value == "true" || value == "TRUE" || value == "yes" || value == "YES");
+    }
 
     // Parse command-line arguments
     for (int i = 1; i < argc; i++) {
@@ -76,6 +86,8 @@ int main(int argc, char* argv[]) {
             config.nativeFormat = true;
         } else if (arg == "--shutdown") {
             shutdownMode = true;
+        } else if (arg == "--yes" || arg == "-y") {
+            assumeYes = true;
         } else {
             std::cerr << "Unknown option: " << arg << std::endl;
             printUsage(argv[0]);
@@ -119,18 +131,20 @@ int main(int argc, char* argv[]) {
 
     // Handle shutdown mode
     if (shutdownMode) {
-        std::cout << "WARNING: This will terminate the Amp Server process.\n"
-                  << "         All clients connected to the amplifier will be disconnected.\n"
-                  << "         Address: " << config.serverAddress << "\n"
-                  << "         Command Port: " << config.commandPort << "\n\n"
-                  << "Are you sure you want to proceed? (y/N): ";
+        if (!assumeYes) {
+            std::cout << "WARNING: This will terminate the Amp Server process.\n"
+                      << "         All clients connected to the amplifier will be disconnected.\n"
+                      << "         Address: " << config.serverAddress << "\n"
+                      << "         Command Port: " << config.commandPort << "\n\n"
+                      << "Are you sure you want to proceed? (y/N): ";
 
-        std::string response;
-        std::getline(std::cin, response);
+            std::string response;
+            std::getline(std::cin, response);
 
-        if (response != "y" && response != "Y") {
-            std::cout << "Shutdown cancelled.\n";
-            return 0;
+            if (response != "y" && response != "Y") {
+                std::cout << "Shutdown cancelled.\n";
+                return 0;
+            }
         }
 
         if (!client.connect()) {
